@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Thynk ROI Modeler</title>
+  <meta name="description" content="Interactive, source-transparent modeling of follow-up quality, leakage reduction, imaging, ION, and da Vinci utilization by findings modules." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <div class="wrap">
+      <p class="eyebrow">Thynk ROI modeler</p>
+      <h1>Quantify quality, leakage, imaging follow‑ups, and robotics capacity — by module</h1>
+      <p class="lede">
+        Input your volumes, service coverage, and device capacity. See how Thynk’s closed‑loop navigation
+        increases on‑time follow‑up, reduces leakage, and fills ION and da Vinci blocks with actionable cases.
+      </p>
+      <p class="lede">
+        Defaults reflect conservative, source‑documented parameters aligned to ACR/NCCN/Society guidance and the
+        methodology used in the Thynk ROI workbook.
+      </p>
+      <div class="header-actions">
+        <button id="btnSave" class="button">Save scenario (URL)</button>
+        <button id="btnReset" class="button button--secondary">Reset</button>
+        <button id="btnExportCsv" class="button button--ghost">Export CSV</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <h2>System-wide inputs</h2>
+          <p>These hydrate all modules. You can override a specific module at any time.</p>
+        </div>
+      </div>
+
+      <div class="grid grid--inputs">
+        <label class="field">
+          <span>Annual CTs performed</span>
+          <input type="number" id="annualCts" value="100000" min="0" step="1000" />
+        </label>
+
+        <label class="field">
+          <span>Monthly LCS exams</span>
+          <input type="number" id="monthlyLcs" value="250" min="0" step="5" />
+        </label>
+
+        <label class="field">
+          <span>Annual prostate MRIs</span>
+          <input type="number" id="annualProstateMrs" value="500" min="0" step="10" />
+        </label>
+
+        <label class="field">
+          <span>Commercial payer share (%)</span>
+          <input type="number" id="commercialPct" value="10" min="0" max="100" step="1" />
+        </label>
+
+        <label class="field">
+          <span>Patients maintained in org (%)</span>
+          <input type="number" id="retainedPct" value="75" min="0" max="100" step="1" />
+        </label>
+
+        <label class="field">
+          <span>ION suites (count)</span>
+          <input type="number" id="ionCount" value="2" min="0" step="1" />
+        </label>
+
+        <label class="field">
+          <span>ION cases per suite / year</span>
+          <input type="number" id="ionCapacity" value="250" min="0" step="10" />
+        </label>
+
+        <label class="field">
+          <span>da Vinci robots (count)</span>
+          <input type="number" id="dvCount" value="3" min="0" step="1" />
+        </label>
+
+        <label class="field">
+          <span>da Vinci cases per robot / year</span>
+          <input type="number" id="dvCapacity" value="275" min="0" step="5" />
+        </label>
+      </div>
+
+      <details class="assumption-details">
+        <summary>Economic assumptions (override if desired)</summary>
+        <div class="grid grid--inputs grid--assumptions">
+          <label class="field">
+            <span>Clinic visit (Medicare)</span>
+            <input type="number" id="priceClinicMedicare" value="150" min="0" step="10" />
+          </label>
+          <label class="field">
+            <span>Clinic visit (Commercial)</span>
+            <input type="number" id="priceClinicCommercial" value="280" min="0" step="10" />
+          </label>
+          <label class="field">
+            <span>Follow-up imaging (Medicare)</span>
+            <input type="number" id="priceImagingMedicare" value="250" min="0" step="10" />
+          </label>
+          <label class="field">
+            <span>Follow-up imaging (Commercial)</span>
+            <input type="number" id="priceImagingCommercial" value="520" min="0" step="10" />
+          </label>
+          <label class="field">
+            <span>Procedure non-robotic (Medicare)</span>
+            <input type="number" id="priceProcMedicare" value="5000" min="0" step="100" />
+          </label>
+          <label class="field">
+            <span>Procedure non-robotic (Commercial)</span>
+            <input type="number" id="priceProcCommercial" value="11000" min="0" step="100" />
+          </label>
+          <label class="field">
+            <span>Procedure da Vinci (Medicare)</span>
+            <input type="number" id="priceRobMedicare" value="6500" min="0" step="100" />
+          </label>
+          <label class="field">
+            <span>Procedure da Vinci (Commercial)</span>
+            <input type="number" id="priceRobCommercial" value="14000" min="0" step="100" />
+          </label>
+        </div>
+        <p class="note">
+          Notes: clinic and imaging are pre‑/diagnostic and not impacted by outmigration; procedures (treatment)
+          are multiplied by retained patients (%). Prices are illustrative and configurable; validate with
+          local OPPS/physician fee schedules. See sources below.
+        </p>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <h2>Service coverage toggles</h2>
+          <p>These determine whether a module can realize its full downstream conversion.</p>
+        </div>
+      </div>
+
+      <div class="grid grid--toggles">
+        <label class="toggle">
+          <input type="checkbox" id="svcRadOnc" checked />
+          <span>Radiation oncology</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcChemo" checked />
+          <span>Chemotherapy infusion</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcVascular" checked />
+          <span>Vascular/cardiac interventional</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcIP" checked />
+          <span>Interventional pulmonology</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcGyn" checked />
+          <span>Gynecology</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcCTSurg" checked />
+          <span>CT surgery</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcUrology" checked />
+          <span>Urology</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="svcGIOnc" checked />
+          <span>Specialty/Oncology surgery or GI</span>
+        </label>
+      </div>
+
+      <p class="note">
+        Example: LCS/pulmonary require Interventional Pulmonology for bronchoscopy and CT surgery for surgical resection.
+        Renal/adrenal require Urology; HPB (liver/pancreas) require surgical oncology/GI; CAC leverages vascular/cardiology.
+      </p>
+    </section>
+
+    <section class="panel panel--programs">
+      <div class="panel__header">
+        <div>
+          <h2>Findings modules</h2>
+          <p>
+            Each card can be enabled/disabled. Calculations use module‑specific detection rates, capture, conversion,
+            device mix, and guideline links. Procedures and robotics are limited by specialist and device capacity.
+          </p>
+        </div>
+        <div class="panel__controls">
+          <button id="btnRehydrate" class="button button--secondary">Distribute CTs to modules</button>
+        </div>
+      </div>
+
+      <div id="programGrid" class="program-grid"><!-- cards injected by app.js --></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <h2>Annual impact summary</h2>
+          <p>
+            Delta shows Thynk vs unmanaged baseline (70% vs 30% capture, respectively). Procedures (treatment)
+            apply retained patients (%). da Vinci/ION counts are capacity limited.
+          </p>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th>Clinics (Δ)</th>
+              <th>Follow-ups (Δ)</th>
+              <th>Procedures (Δ)</th>
+              <th>da Vinci (Δ)</th>
+              <th>ION (Δ)</th>
+              <th>Revenue Δ</th>
+            </tr>
+          </thead>
+          <tbody id="summaryBody"></tbody>
+          <tfoot>
+            <tr>
+              <th>Total</th>
+              <th id="sumClinics">0</th>
+              <th id="sumFups">0</th>
+              <th id="sumProcs">0</th>
+              <th id="sumRob">0</th>
+              <th id="sumIon">0</th>
+              <th id="sumRevenue">$0</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="charts">
+        <div class="chart-card">
+          <h3>Volume mix (with Thynk)</h3>
+          <canvas id="chartVolumes" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Revenue delta (by module)</h3>
+          <canvas id="chartRevenue" height="200"></canvas>
+        </div>
+      </div>
+      <p class="note">
+        Capacity: ION max = <span id="ionMaxNote">0</span> cases/year; da Vinci max = <span id="dvMaxNote">0</span> cases/year.
+        If demand exceeds capacity, cases are capped and a warning badge appears on affected modules.
+      </p>
+    </section>
+
+    <section class="panel panel--sources">
+      <div class="panel__header">
+        <div>
+          <h2>Methodology & sources</h2>
+          <p>Provenance for defaults and how calculations are constructed, aligned with your Excel ROI model.</p>
+        </div>
+      </div>
+
+      <div class="sources">
+        <article>
+          <h3>Methodology (condensed)</h3>
+          <ul>
+            <li>Capture rate: unmanaged baseline ~30% vs Thynk ~70% (conservative midrange of published uplift).</li>
+            <li>Pre-treatment (clinic/imaging) not impacted by outmigration; treatment (procedures) multiplied by retained %.</li>
+            <li>Module conversion limited by specialist capacity and device capacity (ION, da Vinci).</li>
+            <li>Default economic assumptions are configurable; validate with local OPPS/PFS.</li>
+            <li>Guideline links are included per module (ACR, NCCN, SVS, GOLD, TI-RADS, O-RADS, LI-RADS, etc.).</li>
+          </ul>
+        </article>
+
+        <article>
+          <h3>Key references</h3>
+          <ul>
+            <li>Fleischner Society 2017 Pulmonary nodules — https://pubs.rsna.org/doi/epdf/10.1148/radiol.2017161659</li>
+            <li>ACR Lung-RADS v2022 — https://www.acr.org/-/media/ACR/Files/RADS/Lung-RADS/Lung-RADS-2022.pdf</li>
+            <li>ACR Incidental Findings (adrenal, renal, liver, spleen, thyroid, lymph nodes) — JACR white papers</li>
+            <li>SVS/ACC/AHA Aneurysm surveillance — AAA/TAA guidance</li>
+            <li>ACR TI‑RADS (thyroid), O‑RADS (ovary), LI‑RADS (liver)</li>
+            <li>CMS Physician Fee Schedule / OPPS — https://www.cms.gov/medicare/physician-fee-schedule/search</li>
+            <li>American Cancer Society, NCCN care pathways — https://www.cancer.org/</li>
+          </ul>
+          <p class="note">
+            The attached Thynk ROI workbook (internal) underpins module‑level rates and conservative capture
+            assumptions. Service coverage toggles replicate the workbook logic that treatment revenue depends on resources and retention.
+          </p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <div class="wrap">
+      <p>
+        Thynk links radiology, navigation nurses, and specialists to move patients from incidental finding to definitive care,
+        improving patient experience while your hospital retains downstream value.
+      </p>
+      <a class="button" href="mailto:info@thynkhealth.com">Schedule a working session</a>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
