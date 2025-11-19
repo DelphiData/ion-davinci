@@ -472,19 +472,25 @@ function setFromInputs(){
   i.dvCount = +$("#dvCount").value || 0;
   i.dvCapacity = +$("#dvCapacity").value || 0;
 
-  i.prices.clinic.medicare = +$("#priceClinicMedicare").value;
-  i.prices.clinic.commercial = +$("#priceClinicCommercial").value;
-  i.prices.imaging.medicare = +$("#priceImagingMedicare").value;
-  i.prices.imaging.commercial = +$("#priceImagingCommercial").value;
-  i.prices.proc.medicare = +$("#priceProcMedicare").value;
-  i.prices.proc.commercial = +$("#priceProcCommercial").value;
-  i.prices.rob.medicare = +$("#priceRobMedicare").value;
-  i.prices.rob.commercial = +$("#priceRobCommercial").value;
+  // FIX: Add fallback values for prices to prevent NaN
+  i.prices.clinic.medicare = +$("#priceClinicMedicare").value || 150;
+  i.prices.clinic.commercial = +$("#priceClinicCommercial").value || 280;
+  i.prices.imaging.medicare = +$("#priceImagingMedicare").value || 250;
+  i.prices.imaging.commercial = +$("#priceImagingCommercial").value || 520;
+  i.prices.proc.medicare = +$("#priceProcMedicare").value || 5000;
+  i.prices.proc.commercial = +$("#priceProcCommercial").value || 11000;
+  i.prices.rob.medicare = +$("#priceRobMedicare").value || 6500;
+  i.prices.rob.commercial = +$("#priceRobCommercial").value || 14000;
 
   $("#ionMaxNote").textContent = fmtInt(i.ionCount * i.ionCapacity);
   $("#dvMaxNote").textContent = fmtInt(i.dvCount * i.dvCapacity);
 }
-function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+// FIX: Handle NaN in clamp function
+function clamp(n,min,max){ 
+  const num = Number(n) || 0;
+  return Math.max(min, Math.min(max, num)); 
+}
 
 function hydrateCtsIfTriggered(changedId){
   if (changedId === "annualCts") {
@@ -638,9 +644,9 @@ function setModuleField(id, field, rawValue){
   let value = rawValue;
   if (typeof rawValue === "string" && rawValue.trim() === "") value = null;
 
-  // numeric coercion for numeric fields
+  // FIX: Add actionablePct to numeric fields array
   const numericFields = [
-    "ctsPerYear","detectionPct","captureThynk","captureBaseline","conversionToProcedure",
+    "ctsPerYear","detectionPct","actionablePct","captureThynk","captureBaseline","conversionToProcedure",
     "ionShareOfProcedures","roboticShareOfProcedures","followupsPerProcedure","specialists",
     "capacityPerSpecialist","lcsMonthlyOverride","annualMrOverride"
   ];
@@ -654,160 +660,167 @@ function setModuleField(id, field, rawValue){
 }
 
 function recalcAndRender(){
-  // reset capacity
-  state.capacity.ionRemaining = state.inputs.ionCount * state.inputs.ionCapacity;
-  state.capacity.dvRemaining = state.inputs.dvCount * state.inputs.dvCapacity;
+  // FIX: Add error handling to prevent silent failures
+  try {
+    // reset capacity
+    state.capacity.ionRemaining = state.inputs.ionCount * state.inputs.ionCapacity;
+    state.capacity.dvRemaining = state.inputs.dvCount * state.inputs.dvCapacity;
 
-  const summaryRows = [];
-  let totals = { clinics:0, fups:0, procs:0, rob:0, ion:0, revenue:0 };
+    const summaryRows = [];
+    let totals = { clinics:0, fups:0, procs:0, rob:0, ion:0, revenue:0 };
 
-  // compute per module
-  state.modules.forEach(mod => {
-    const card = document.querySelector(`.program[data-id="${mod.id}"]`);
-    const badge = card.querySelector('[data-badge="capacity"]');
+    // compute per module
+    state.modules.forEach(mod => {
+      const card = document.querySelector(`.program[data-id="${mod.id}"]`);
+      const badge = card.querySelector('[data-badge="capacity"]');
 
-    if (!mod.enabled){
-      badge.textContent = "Off";
-      badge.className = "badge badge--off";
-      writeOutputs(card, { clinics:0, procs:0, rob:0, ion:0, revenue:0, leakage:0 });
-      summaryRows.push({ id:mod.id, label: mod.name, clinics:0, fups:0, procs:0, rob:0, ion:0, revenue:0 });
-      return;
-    }
+      if (!mod.enabled){
+        badge.textContent = "Off";
+        badge.className = "badge badge--off";
+        writeOutputs(card, { clinics:0, procs:0, rob:0, ion:0, revenue:0, leakage:0 });
+        summaryRows.push({ id:mod.id, label: mod.name, clinics:0, fups:0, procs:0, rob:0, ion:0, revenue:0 });
+        return;
+      }
 
-    const svcOkFactor = serviceCoverageFactor(mod.requiredServices);
-    const retained = state.inputs.retainedPct / 100;
+      const svcOkFactor = serviceCoverageFactor(mod.requiredServices);
+      const retained = state.inputs.retainedPct / 100;
 
-    // exposure
-    let baseExams = 0;
-    if (mod.kind === "lcs"){
-      const monthly = mod.values.lcsMonthlyOverride ?? state.inputs.monthlyLcs;
-      baseExams = monthly * 12;
-    } else if (mod.kind === "mr"){
-      const annual = mod.values.annualMrOverride ?? state.inputs.annualProstateMrs;
-      baseExams = annual;
-    } else {
-      baseExams = mod.values.ctsPerYear ?? 0;
-    }
+      // exposure
+      let baseExams = 0;
+      if (mod.kind === "lcs"){
+        const monthly = mod.values.lcsMonthlyOverride ?? state.inputs.monthlyLcs;
+        baseExams = monthly * 12;
+      } else if (mod.kind === "mr"){
+        const annual = mod.values.annualMrOverride ?? state.inputs.annualProstateMrs;
+        baseExams = annual;
+      } else {
+        baseExams = mod.values.ctsPerYear ?? 0;
+      }
 
-    // detection & capture
-    const detPct = (mod.values.detectionPct ?? mod.defaults.detectionPct) / 100;
-    const actionable = (mod.kind === "lcs")
-      ? baseExams * ((mod.values.actionablePct ?? mod.defaults.actionablePct) / 100)
-      : baseExams * detPct;
+      // detection & capture
+      const detPct = (mod.values.detectionPct ?? mod.defaults.detectionPct) / 100;
+      const actionable = (mod.kind === "lcs")
+        ? baseExams * ((mod.values.actionablePct ?? mod.defaults.actionablePct) / 100)
+        : baseExams * detPct;
 
-    const capTh = (mod.values.captureThynk ?? 70) / 100;
-    const capBl = (mod.values.captureBaseline ?? 30) / 100;
+      const capTh = (mod.values.captureThynk ?? 70) / 100;
+      const capBl = (mod.values.captureBaseline ?? 30) / 100;
 
-    const clinicsTh = actionable * capTh;
-    const clinicsBl = actionable * capBl;
+      const clinicsTh = actionable * capTh;
+      const clinicsBl = actionable * capBl;
 
-    // conversion to procedure with service coverage factor
-    const conv = ((mod.values.conversionToProcedure ?? mod.defaults.conversionToProcedure) / 100) * svcOkFactor;
+      // conversion to procedure with service coverage factor
+      const conv = ((mod.values.conversionToProcedure ?? mod.defaults.conversionToProcedure) / 100) * svcOkFactor;
 
-    // theoretical procedures (before capacity)
-    const procThRaw = clinicsTh * conv;
-    const procBlRaw = clinicsBl * conv;
+      // theoretical procedures (before capacity)
+      const procThRaw = clinicsTh * conv;
+      const procBlRaw = clinicsBl * conv;
 
-    // specialist capacity
-    const specialistCap = (mod.values.specialists ?? mod.defaults.specialists) * (mod.values.capacityPerSpecialist ?? mod.defaults.capacityPerSpecialist);
+      // specialist capacity
+      const specialistCap = (mod.values.specialists ?? mod.defaults.specialists) * (mod.values.capacityPerSpecialist ?? mod.defaults.capacityPerSpecialist);
 
-    const procThCapped = Math.min(procThRaw, specialistCap);
-    const procBlCapped = Math.min(procBlRaw, specialistCap);
+      const procThCapped = Math.min(procThRaw, specialistCap);
+      const procBlCapped = Math.min(procBlRaw, specialistCap);
 
-    // shares
-    const robShare = (mod.values.roboticShareOfProcedures ?? mod.defaults.roboticShareOfProcedures) / 100;
-    const ionShare = (mod.values.ionShareOfProcedures ?? mod.defaults.ionShareOfProcedures) / 100;
+      // shares
+      const robShare = (mod.values.roboticShareOfProcedures ?? mod.defaults.roboticShareOfProcedures) / 100;
+      const ionShare = (mod.values.ionShareOfProcedures ?? mod.defaults.ionShareOfProcedures) / 100;
 
-    let robTh = procThCapped * robShare;
-    let ionTh = procThCapped * ionShare;
+      let robTh = procThCapped * robShare;
+      let ionTh = procThCapped * ionShare;
 
-    // apply device capacity (global ledger)
-    const robCapAvail = state.capacity.dvRemaining;
-    const ionCapAvail = state.capacity.ionRemaining;
+      // apply device capacity (global ledger)
+      const robCapAvail = state.capacity.dvRemaining;
+      const ionCapAvail = state.capacity.ionRemaining;
 
-    let robWarn = false, ionWarn = false;
+      let robWarn = false, ionWarn = false;
 
-    if (robTh > robCapAvail){
-      robTh = robCapAvail;
-      robWarn = true;
-    }
-    state.capacity.dvRemaining -= robTh;
+      if (robTh > robCapAvail){
+        robTh = robCapAvail;
+        robWarn = true;
+      }
+      state.capacity.dvRemaining -= robTh;
 
-    if (ionTh > ionCapAvail){
-      ionTh = ionCapAvail;
-      ionWarn = true;
-    }
-    state.capacity.ionRemaining -= ionTh;
+      if (ionTh > ionCapAvail){
+        ionTh = ionCapAvail;
+        ionWarn = true;
+      }
+      state.capacity.ionRemaining -= ionTh;
 
-    // follow-ups per procedure
-    const fupsTh = procThCapped * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure);
+      // follow-ups per procedure
+      const fupsTh = procThCapped * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure);
 
-    // revenue (delta with - baseline)
-    const prices = blendedPrices();
-    const clinicRevTh = clinicsTh * prices.clinic;
-    const clinicRevBl = clinicsBl * prices.clinic;
+      // revenue (delta with - baseline)
+      const prices = blendedPrices();
+      const clinicRevTh = clinicsTh * prices.clinic;
+      const clinicRevBl = clinicsBl * prices.clinic;
 
-    const fupRevTh = fupsTh * prices.imaging;
-    const fupRevBl = (procBlCapped * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure)) * prices.imaging;
+      const fupRevTh = fupsTh * prices.imaging;
+      const fupRevBl = (procBlCapped * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure)) * prices.imaging;
 
-    // split robotic vs non robotic revenue for Thynk side (baseline similarly)
-    const nonRobTh = Math.max(procThCapped - robTh, 0);
-    const nonRobBl = Math.max(procBlCapped - Math.min(procBlCapped, robTh), 0); // approximate split for baseline
+      // split robotic vs non robotic revenue for Thynk side (baseline similarly)
+      const nonRobTh = Math.max(procThCapped - robTh, 0);
+      const nonRobBl = Math.max(procBlCapped - Math.min(procBlCapped, robTh), 0); // approximate split for baseline
 
-    const procRevTh = retained * (nonRobTh * prices.proc + robTh * prices.rob);
-    const procRevBl = retained * (nonRobBl * prices.proc + Math.min(procBlCapped, robTh) * prices.rob);
+      const procRevTh = retained * (nonRobTh * prices.proc + robTh * prices.rob);
+      const procRevBl = retained * (nonRobBl * prices.proc + Math.min(procBlCapped, robTh) * prices.rob);
 
-    const revenueDelta = (clinicRevTh + fupRevTh + procRevTh) - (clinicRevBl + fupRevBl + procRevBl);
+      const revenueDelta = (clinicRevTh + fupRevTh + procRevTh) - (clinicRevBl + fupRevBl + procRevBl);
 
-    // leakage avoided proxy (extra procedures times (1-retained) becomes retained): show absolute added retained procedures
-    const procDelta = procThCapped - procBlCapped;
-    const leakageAvoided = Math.max(procDelta * retained, 0);
+      // leakage avoided proxy (extra procedures times (1-retained) becomes retained): show absolute added retained procedures
+      const procDelta = procThCapped - procBlCapped;
+      const leakageAvoided = Math.max(procDelta * retained, 0);
 
-    // warnings
-    if (robWarn && ionWarn) {
-      badge.textContent = "da Vinci & ION capped";
-      badge.className = "badge badge--warn";
-    } else if (robWarn) {
-      badge.textContent = "da Vinci capped";
-      badge.className = "badge badge--warn";
-    } else if (ionWarn) {
-      badge.textContent = "ION capped";
-      badge.className = "badge badge--warn";
-    } else {
-      badge.textContent = "OK";
-      badge.className = "badge badge--ok";
-    }
+      // warnings
+      if (robWarn && ionWarn) {
+        badge.textContent = "da Vinci & ION capped";
+        badge.className = "badge badge--warn";
+      } else if (robWarn) {
+        badge.textContent = "da Vinci capped";
+        badge.className = "badge badge--warn";
+      } else if (ionWarn) {
+        badge.textContent = "ION capped";
+        badge.className = "badge badge--warn";
+      } else {
+        badge.textContent = "OK";
+        badge.className = "badge badge--ok";
+      }
 
-    writeOutputs(card, {
-      clinics: clinicsTh,
-      procs: procThCapped,
-      rob: robTh,
-      ion: ionTh,
-      revenue: revenueDelta,
-      leakage: leakageAvoided
+      writeOutputs(card, {
+        clinics: clinicsTh,
+        procs: procThCapped,
+        rob: robTh,
+        ion: ionTh,
+        revenue: revenueDelta,
+        leakage: leakageAvoided
+      });
+
+      summaryRows.push({
+        id: mod.id,
+        label: mod.name,
+        clinics: clinicsTh - clinicsBl,
+        fups: fupsTh - ((procBlCapped) * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure)),
+        procs: procThCapped - procBlCapped,
+        rob: robTh - Math.min(procBlCapped, robTh), // approximate uplift
+        ion: ionTh - Math.min(procBlCapped, ionTh),
+        revenue: revenueDelta
+      });
+
+      totals.clinics += clinicsTh - clinicsBl;
+      totals.fups += fupsTh - ((procBlCapped) * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure));
+      totals.procs += procThCapped - procBlCapped;
+      totals.rob += robTh - Math.min(procBlCapped, robTh);
+      totals.ion += ionTh - Math.min(procBlCapped, ionTh);
+      totals.revenue += revenueDelta;
     });
 
-    summaryRows.push({
-      id: mod.id,
-      label: mod.name,
-      clinics: clinicsTh - clinicsBl,
-      fups: fupsTh - ((procBlCapped) * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure)),
-      procs: procThCapped - procBlCapped,
-      rob: robTh - Math.min(procBlCapped, robTh), // approximate uplift
-      ion: ionTh - Math.min(procBlCapped, ionTh),
-      revenue: revenueDelta
-    });
-
-    totals.clinics += clinicsTh - clinicsBl;
-    totals.fups += fupsTh - ((procBlCapped) * (mod.values.followupsPerProcedure ?? mod.defaults.followupsPerProcedure));
-    totals.procs += procThCapped - procBlCapped;
-    totals.rob += robTh - Math.min(procBlCapped, robTh);
-    totals.ion += ionTh - Math.min(procBlCapped, ionTh);
-    totals.revenue += revenueDelta;
-  });
-
-  renderSummaryTable(summaryRows, totals);
-  renderCharts(summaryRows, totals);
+    renderSummaryTable(summaryRows, totals);
+    renderCharts(summaryRows, totals);
+  } catch (error) {
+    console.error("Error in recalcAndRender:", error);
+    // Optionally show user-friendly error message
+    alert("An error occurred during calculation. Please check your inputs and try again.");
+  }
 }
 
 function serviceCoverageFactor(req){
