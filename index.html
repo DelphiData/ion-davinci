@@ -18,6 +18,14 @@
   <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+   <script>
+    const password = prompt("Password:");
+    if (password !== "mySecret123") {
+      document.write("<h1>Access denied</h1>");
+      // Stop loading the rest of the page
+      throw new Error("Unauthorized");
+    }
+  </script>
 <body>
   <header class="page-header">
     <div class="wrap">
