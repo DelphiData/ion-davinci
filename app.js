@@ -472,25 +472,25 @@ function setFromInputs(){
   i.dvCount = +$("#dvCount").value || 0;
   i.dvCapacity = +$("#dvCapacity").value || 0;
 
-  // FIX: Add fallback values for prices to prevent NaN
-  i.prices.clinic.medicare = +$("#priceClinicMedicare").value || 150;
-  i.prices.clinic.commercial = +$("#priceClinicCommercial").value || 280;
-  i.prices.imaging.medicare = +$("#priceImagingMedicare").value || 250;
-  i.prices.imaging.commercial = +$("#priceImagingCommercial").value || 520;
-  i.prices.proc.medicare = +$("#priceProcMedicare").value || 5000;
-  i.prices.proc.commercial = +$("#priceProcCommercial").value || 11000;
-  i.prices.rob.medicare = +$("#priceRobMedicare").value || 6500;
-  i.prices.rob.commercial = +$("#priceRobCommercial").value || 14000;
+  i.prices.clinic.medicare = +$("#priceClinicMedicare").value || 0;
+  i.prices.clinic.commercial = +$("#priceClinicCommercial").value || 0;
+  i.prices.imaging.medicare = +$("#priceImagingMedicare").value || 0;
+  i.prices.imaging.commercial = +$("#priceImagingCommercial").value || 0;
+  i.prices.proc.medicare = +$("#priceProcMedicare").value || 0;
+  i.prices.proc.commercial = +$("#priceProcCommercial").value || 0;
+  i.prices.rob.medicare = +$("#priceRobMedicare").value || 0;
+  i.prices.rob.commercial = +$("#priceRobCommercial").value || 0;
 
   $("#ionMaxNote").textContent = fmtInt(i.ionCount * i.ionCapacity);
   $("#dvMaxNote").textContent = fmtInt(i.dvCount * i.dvCapacity);
 }
 
-// FIX: Handle NaN in clamp function
-function clamp(n,min,max){ 
-  const num = Number(n) || 0;
-  return Math.max(min, Math.min(max, num)); 
+function clamp(n, min, max) {
+  const num = parseFloat(n);
+  // Return 0 if n is not a number, otherwise clamp it
+  return isNaN(num) ? 0 : Math.max(min, Math.min(max, num));
 }
+
 
 function hydrateCtsIfTriggered(changedId){
   if (changedId === "annualCts") {
@@ -498,6 +498,7 @@ function hydrateCtsIfTriggered(changedId){
   }
 }
 
+// FIX: This function now updates the DOM to reflect the changes it makes to the state.
 function distributeCtsToModules(){
   const annual = state.inputs.annualCts;
   state.modules.forEach(m => {
@@ -505,10 +506,18 @@ function distributeCtsToModules(){
       const share = m.values.shareOfCts ?? m.defaults.shareOfCts ?? 0;
       const cts = Math.round(annual * share);
       setModuleField(m.id, "ctsPerYear", cts);
+      
+      // This is the added line: it finds the specific input box on the page
+      // and updates its value, so the user sees the new number.
+      const inputEl = document.querySelector(`.program[data-id="${m.id}"] [data-field="ctsPerYear"]`);
+      if (inputEl) {
+        inputEl.value = cts;
+      }
     }
   });
   recalcAndRender();
 }
+
 
 function renderModuleCard(m){
   const card = document.createElement("article");
@@ -644,13 +653,15 @@ function setModuleField(id, field, rawValue){
   let value = rawValue;
   if (typeof rawValue === "string" && rawValue.trim() === "") value = null;
 
-  // FIX: Add actionablePct to numeric fields array
+  // FIX: Ensure all relevant fields are treated as numbers.
   const numericFields = [
     "ctsPerYear","detectionPct","actionablePct","captureThynk","captureBaseline","conversionToProcedure",
     "ionShareOfProcedures","roboticShareOfProcedures","followupsPerProcedure","specialists",
     "capacityPerSpecialist","lcsMonthlyOverride","annualMrOverride"
   ];
-  if (numericFields.includes(field) && value !== null) value = +value;
+  if (numericFields.includes(field) && value !== null) {
+      value = +value;
+  }
 
   if (field === "enabled"){
     mod.enabled = !!value;
@@ -660,7 +671,6 @@ function setModuleField(id, field, rawValue){
 }
 
 function recalcAndRender(){
-  // FIX: Add error handling to prevent silent failures
   try {
     // reset capacity
     state.capacity.ionRemaining = state.inputs.ionCount * state.inputs.ionCapacity;
@@ -816,10 +826,9 @@ function recalcAndRender(){
 
     renderSummaryTable(summaryRows, totals);
     renderCharts(summaryRows, totals);
-  } catch (error) {
-    console.error("Error in recalcAndRender:", error);
-    // Optionally show user-friendly error message
-    alert("An error occurred during calculation. Please check your inputs and try again.");
+  } catch (e) {
+      console.error("Calculation Error:", e);
+      alert("A calculation error occurred. Please check the console for details and verify your inputs are correct.");
   }
 }
 
